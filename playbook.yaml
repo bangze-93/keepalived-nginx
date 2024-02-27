@@ -1,0 +1,95 @@
+---
+- name: Keepalived X Nginx
+  hosts: all
+  become: true
+  become_method: sudo
+  vars:
+    vip: 192.168.200.36
+    master_ip: "{{ hostvars['master']['ansible_host'] }}"
+    backup_ip: "{{ hostvars['backup']['ansible_host'] }}"
+    interface: "{{ ansible_default_ipv4.interface }}"
+  tasks:
+    - name: Update and upgrade apt packages
+      ansible.builtin.apt:
+        upgrade: 'yes'
+        state: present
+        force_apt_get: true
+        update_cache: true
+        cache_valid_time: 86400
+
+    - name: Create keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: 0755
+
+    - name: Add Nginx gpg key
+      ansible.builtin.apt_key:
+        keyserver: hkp://keyserver.ubuntu.com:80
+        id: ABF5BD827BD9BF62
+        keyring: /etc/apt/keyrings/nginx.gpg
+        state: present
+
+    - name: Add Nginx repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/nginx.gpg] https://nginx.org/packages/ubuntu/ focal nginx"
+        filename: nginx
+        state: present
+
+    - name: Install required packages
+      ansible.builtin.apt:
+        state: present
+        update_cache: true
+        pkg:
+          - keepalived
+          - nginx=1.24.0-1~focal
+          - net-tools
+
+    - name: Enable IP forwarding
+      ansible.builtin.copy:
+        src: keepalived.conf
+        dest: /etc/sysctl.d/keepalived.conf
+        mode: 0644
+
+    - name: Create keepalived.conf for master
+      ansible.builtin.template:
+        src: master.conf
+        dest: /etc/keepalived/keepalived.conf
+        mode: 0644
+        backup: true
+      when: inventory_hostname == 'master'
+
+    - name: Create keepalived.conf for backup
+      ansible.builtin.template:
+        src: backup.conf
+        dest: /etc/keepalived/keepalived.conf
+        mode: 0644
+        backup: true
+      when: inventory_hostname == 'backup'
+
+    - name: Config default index.html on master
+      ansible.builtin.copy:
+        src: index1.html
+        dest: /usr/share/nginx/html/index.html
+        mode: 0644
+      when: inventory_hostname == 'master'
+
+    - name: Config default index.html on backup
+      ansible.builtin.copy:
+        src: index2.html
+        dest: /usr/share/nginx/html/index.html
+        mode: 0644
+      when: inventory_hostname == 'backup'
+
+    - name: Reload sysctl
+      ansible.builtin.command: sysctl --system
+
+    - name: Restart keepalived and nginx
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: restarted
+        enabled: true
+      loop:
+        - keepalived
+        - nginx
+...
