@@ -27,3 +27,5 @@ ansible-playbook -i hosts playbook.yaml
  
 ### Open your favorite browser and access
 http://192.168.200.36
+
+![image](https://github.com/bangze-93/keepalived-nginx/assets/52735927/6992bf84-59f0-4230-9e6b-832c5cc16c91)
